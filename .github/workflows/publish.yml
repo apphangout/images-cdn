@@ -1,0 +1,43 @@
+name: Publish Images CDN
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [ main ]
+    paths:
+      - "images/**"
+      - ".github/workflows/publish.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build cdn folder
+        run: |
+          set -eux
+          rm -rf cdn && mkdir -p cdn
+          rsync -av --delete images/ cdn/images/ || true
+          echo "cdn.hangout.app.br" > cdn/CNAME
+          python3 - <<'PY'
+          import os
+          for root, dirs, files in os.walk('cdn'):
+              items=[]
+              for d in sorted(dirs): items.append(f'<li><a href="{d}/">{d}/</a></li>')
+              for f in sorted(files):
+                  if f in ('index.html','CNAME'): continue
+                  items.append(f'<li><a href="{f}">{f}</a></li>')
+              with open(os.path.join(root,'index.html'),'w',encoding='utf-8') as fp:
+                  fp.write('<!doctype html><meta charset="utf-8"><title>Index</title><ul>')
+                  fp.write('\n'.join(items)); fp.write('</ul>')
+          PY
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: cdn
+          force_orphan: true
